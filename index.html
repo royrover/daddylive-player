@@ -49,44 +49,58 @@ const video = document.getElementById("video");
 const hud = document.getElementById("hud");
 
 // ================================
+// CHECK STREAM FIRST
+// ================================
+async function getStream() {
+  const res = await fetch(`${WORKER}/?vid=${VID}`);
+
+  if (!res.ok) {
+    throw new Error("Resolver failed: " + res.status);
+  }
+
+  return await res.json();
+}
+
+// ================================
 // LOAD STREAM
 // ================================
 async function loadStream() {
   try {
     hud.innerText = "Fetching stream...";
 
-    const res = await fetch(`${WORKER}/?vid=${VID}`);
-    const data = await res.json();
+    const data = await getStream();
 
     if (!data.stream) {
-      hud.innerText = "No stream";
+      hud.innerText = "No stream found";
+      return;
+    }
+
+    hud.innerText = "Checking stream...";
+
+    // ================================
+    // test stream ก่อนใช้จริง
+    // ================================
+    const test = await fetch(data.stream, { method: "HEAD" });
+
+    if (!test.ok) {
+      hud.innerText = "Stream expired or blocked: " + test.status;
       return;
     }
 
     hud.innerText = "Playing... TTL " + data.ttl;
 
-    // ================================
-    // ถ้า stream เดิม → ไม่ reload
-    // ================================
     if (currentStream === data.stream) {
-      hud.innerText = "Same stream (skip reload)";
       scheduleRefresh(data.ttl);
       return;
     }
 
     currentStream = data.stream;
 
-    // ================================
-    // reset player
-    // ================================
     if (hls) {
       hls.destroy();
       hls = null;
     }
 
-    // ================================
-    // HLS PLAY
-    // ================================
     if (Hls.isSupported()) {
       hls = new Hls({
         maxBufferLength: 5,
@@ -103,26 +117,24 @@ async function loadStream() {
     scheduleRefresh(data.ttl);
 
   } catch (err) {
-    hud.innerText = "Error loading stream";
+    hud.innerText = "Error: " + err.message;
     console.error(err);
   }
 }
 
 // ================================
-// AUTO REFRESH CONTROLLER
+// AUTO REFRESH (กัน token หมดอายุ)
 // ================================
 function scheduleRefresh(ttl) {
   if (refreshTimer) clearTimeout(refreshTimer);
 
-  // refresh ก่อนหมดอายุ 5 วิ
-  const refreshTime = (ttl - 5) * 1000;
+  const refreshTime = Math.max(5, ttl - 10) * 1000;
 
   refreshTimer = setTimeout(() => {
     loadStream();
   }, refreshTime);
 }
 
-// start
 loadStream();
 </script>
 
