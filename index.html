@@ -6,13 +6,15 @@
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
 <style>
-body { margin:0; background:black; }
+body { margin:0; background:black; font-family: sans-serif; }
 video { width:100%; height:100vh; }
 #hud {
   position:fixed; top:10px; left:10px;
   color:white; font-size:12px;
-  background:rgba(0,0,0,0.5);
-  padding:6px;
+  background:rgba(0,0,0,0.6);
+  padding:6px 10px;
+  border-radius: 4px;
+  z-index: 999;
 }
 </style>
 </head>
@@ -20,7 +22,7 @@ video { width:100%; height:100vh; }
 <body>
 
 <div id="hud">loading...</div>
-<video id="v" controls autoplay muted></video>
+<video id="v" controls autoplay muted playsinline></video>
 
 <script>
 const API = "https://ddl.royrover.workers.dev";
@@ -30,43 +32,69 @@ let hls;
 let lastStream = "";
 let timer;
 
+// ฟังก์ชันแปลงลิงก์สตรีมธรรมดาให้วิ่งผ่านตัวแปลงทราฟฟิกของ Cloudflare Workers
+function convertToProxyUrl(rawUrl) {
+  if (!rawUrl) return "";
+  // แยกส่วนหัว https:// ออกแล้วสอดแทรกคำว่า /proxy/ ต่อท้ายโดเมนหลักของคุณแทน
+  const cleanUrl = rawUrl.replace(/^https?:\/\//, "");
+  return `${API}/proxy/${cleanUrl}`;
+}
+
 async function load() {
-  const res = await fetch(`${API}/?vid=${VID}`);
-  const data = await res.json();
+  try {
+    const res = await fetch(`${API}/?vid=${VID}`);
+    const data = await res.json();
 
-  document.getElementById("hud").innerText =
-    "TTL: " + data.ttl;
+    document.getElementById("hud").innerText = "TTL: " + data.ttl + "s";
 
-  if (!data.stream) return;
+    if (!data.stream) {
+      document.getElementById("hud").innerText = "Error: Stream URL is empty";
+      return;
+    }
 
-  // 🔥 ไม่ reload ถ้า stream เดิม
-  if (data.stream === lastStream) {
+    // 🔥 ตรวจจับ: ถ้าหาก URL ดิบไม่มีการเปลี่ยนแปลง ให้รันเวลานับถอยหลังต่อ โดยไม่ต้องรีโหลดภาพใหม่
+    if (data.stream === lastStream) {
+      schedule(data.ttl);
+      return;
+    }
+
+    lastStream = data.stream;
+
+    // นำลิงก์สดแปลงร่างเข้าสู่ท่อ Proxy ก่อนใช้งาน
+    const proxiedStreamUrl = convertToProxyUrl(data.stream);
+
+    if (hls) hls.destroy();
+
+    if (Hls.isSupported()) {
+      const videoElement = document.getElementById("v");
+      hls = new Hls({
+        maxBufferLength: 5,
+        liveSyncDurationCount: 3,
+        enableWorker: true // เปิดใช้งาน Worker หลังบ้านของเบราว์เซอร์เพื่อความเสถียร
+      });
+
+      // สั่งงานให้ดึงสตรีมเวอร์ชันผ่าน Proxy
+      hls.loadSource(proxiedStreamUrl);
+      hls.attachMedia(videoElement);
+    } else if (document.getElementById("v").canPlayType('application/vnd.apple.mpegurl')) {
+      // สำหรับระบบที่รองรับ HLS ในตัวโดยตรง (เช่น บราวเซอร์ Safari บน iOS/Mac)
+      document.getElementById("v").src = proxiedStreamUrl;
+    }
+
     schedule(data.ttl);
-    return;
+
+  } catch (error) {
+    document.getElementById("hud").innerText = "Error fetching token: " + error.message;
+    // หากเกิดข้อผิดพลาดในการดึง ให้พยายามรีโหลดสมานแผลใหม่ในอีก 5 วินาที
+    schedule(10);
   }
-
-  lastStream = data.stream;
-
-  if (hls) hls.destroy();
-
-  if (Hls.isSupported()) {
-    hls = new Hls({
-      maxBufferLength: 5,
-      liveSyncDurationCount: 3,
-    });
-
-    hls.loadSource(data.stream);
-    hls.attachMedia(document.getElementById("v"));
-  } else {
-    document.getElementById("v").src = data.stream;
-  }
-
-  schedule(data.ttl);
 }
 
 function schedule(ttl) {
   clearTimeout(timer);
-  timer = setTimeout(load, (ttl - 5) * 1000);
+  // ตั้งค่าดึงโทเค็นใหม่ล่วงหน้า 5 วินาทีก่อนลิงก์เก่าหมดอายุ
+  const delay = (ttl - 5) * 1000;
+  timer = setTimeout(load, delay < 0 ? 1000 : delay);
 }
 
 load();
