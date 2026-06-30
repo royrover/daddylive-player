@@ -1,20 +1,17 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>IPTV Player</title>
+<meta charset="utf-8"/>
+<title>NUtv Player</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
 <style>
-body { margin:0; background:black; font-family: sans-serif; }
+body { margin:0; background:black; }
 video { width:100%; height:100vh; }
 #hud {
   position:fixed; top:10px; left:10px;
-  color:white; font-size:12px;
-  background:rgba(0,0,0,0.6);
-  padding:6px 10px;
-  border-radius: 4px;
-  z-index: 999;
+  color:white; background:#0008;
+  padding:8px; font-size:12px;
 }
 </style>
 </head>
@@ -22,92 +19,55 @@ video { width:100%; height:100vh; }
 <body>
 
 <div id="hud">loading...</div>
-<video id="v" controls autoplay muted playsinline></video>
+<video id="video" controls autoplay muted></video>
 
 <script>
-const API = "https://ddl.royrover.workers.dev";
+const WORKER = "https://ddl.royrover.workers.dev";
 const VID = 54;
 
 let hls;
-let lastStream = "";
-let timer;
-
-// ฟังก์ชันแปลงลิงก์สตรีมธรรมดาให้วิ่งผ่านตัวแปลงทราฟฟิกของ Cloudflare Workers
-function convertToProxyUrl(rawUrl) {
-  if (!rawUrl) return "";
-  
-  // ทำความสะอาดลิงก์ ดึงเอาเฉพาะ URL ของสตรีมจริงๆ ออกมา (ตัดพวกเศษสัญญาน Error ที่ติดมาออก)
-  let cleanUrl = rawUrl;
-  if (cleanUrl.includes("#")) {
-    cleanUrl = cleanUrl.split("#")[1]; // ดึงเฉพาะตัวลิงก์สตรีมหลังเครื่องหมาย # ถ้ามี
-  }
-  if (cleanUrl.includes("&error=")) {
-    cleanUrl = cleanUrl.split("&error=")[0];
-  }
-  
-  cleanUrl = cleanUrl.trim();
-  
-  // 🚀 ไม้ตาย: ส่งแบบ URL Encode ทั้งก้อนเพื่อให้ Worker ไปแกะอ่านปลายทางได้แม่นยำ ไม่หลุดเลเยอร์
-  return `${API}/proxy/?url=${encodeURIComponent(cleanUrl)}`;
-}
+let current = "";
 
 async function load() {
   try {
-    const res = await fetch(`${API}/?vid=${VID}`);
+    const res = await fetch(`${WORKER}/?vid=${VID}`);
     const data = await res.json();
 
-    document.getElementById("hud").innerText = "TTL: " + data.ttl + "s";
+    if (!data.stream) return;
 
-    if (!data.stream) {
-      document.getElementById("hud").innerText = "Error: Stream URL is empty";
-      return;
-    }
+    document.getElementById("hud").innerText =
+      "TTL " + data.ttl;
 
-    // 🔥 ตรวจจับ: ถ้าหาก URL ดิบไม่มีการเปลี่ยนแปลง ให้รันเวลานับถอยหลังต่อ โดยไม่ต้องรีโหลดภาพใหม่
-    if (data.stream === lastStream) {
-      schedule(data.ttl);
-      return;
-    }
+    if (current === data.stream) return;
 
-    lastStream = data.stream;
-
-    // นำลิงก์สดแปลงร่างเข้าสู่ท่อ Proxy ก่อนใช้งาน
-    const proxiedStreamUrl = convertToProxyUrl(data.stream);
+    current = data.stream;
 
     if (hls) hls.destroy();
 
-    if (Hls.isSupported()) {
-      const videoElement = document.getElementById("v");
-      hls = new Hls({
-        maxBufferLength: 5,
-        liveSyncDurationCount: 3,
-        enableWorker: true // เปิดใช้งาน Worker หลังบ้านของเบราว์เซอร์เพื่อความเสถียร
-      });
+    hls = new Hls({
+      maxBufferLength: 5,
+      liveSyncDurationCount: 3
+    });
 
-      // สั่งงานให้ดึงสตรีมเวอร์ชันผ่าน Proxy
-      hls.loadSource(proxiedStreamUrl);
-      hls.attachMedia(videoElement);
-    } else if (document.getElementById("v").canPlayType('application/vnd.apple.mpegurl')) {
-      // สำหรับระบบที่รองรับ HLS ในตัวโดยตรง (เช่น บราวเซอร์ Safari บน iOS/Mac)
-      document.getElementById("v").src = proxiedStreamUrl;
-    }
+    hls.loadSource(data.stream);
+    hls.attachMedia(document.getElementById("video"));
 
-    schedule(data.ttl);
+    hls.on(Hls.Events.ERROR, function(_, d) {
+      if (d.fatal) {
+        hls.destroy();
+        setTimeout(load, 2000);
+      }
+    });
 
-  } catch (error) {
-    document.getElementById("hud").innerText = "Error fetching token: " + error.message;
-    // หากเกิดข้อผิดพลาดในการดึง ให้พยายามรีโหลดสมานแผลใหม่ในอีก 5 วินาที
-    schedule(10);
+  } catch (e) {
+    document.getElementById("hud").innerText =
+      "retrying...";
+    setTimeout(load, 2000);
   }
 }
 
-function schedule(ttl) {
-  clearTimeout(timer);
-  // ตั้งค่าดึงโทเค็นใหม่ล่วงหน้า 5 วินาทีก่อนลิงก์เก่าหมดอายุ
-  const delay = (ttl - 5) * 1000;
-  timer = setTimeout(load, delay < 0 ? 1000 : delay);
-}
-
+// auto refresh
+setInterval(load, 110000);
 load();
 </script>
 
