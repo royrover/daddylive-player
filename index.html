@@ -23,30 +23,53 @@ video { width:100%; height:100vh; }
 <video id="video" controls autoplay muted></video>
 
 <script>
-const API = "http://dootvz.myds.me:9988/db66/DDL_P.php";
-const WORKER = "https://ddl.royrover.workers.dev";
-
+const API = "https://ddl.royrover.workers.dev";
 const vid = new URLSearchParams(location.search).get("vid");
 
+const video = document.getElementById("video");
+const hud = document.getElementById("hud");
+
 let hls;
-let video = document.getElementById("video");
 
 async function load() {
-  const r = await fetch(API + "?vid=" + vid);
-  const data = await r.json();
+  try {
+    hud.innerText = "Resolving...";
 
-  // ❗ ต้องเป็น master ผ่าน worker เท่านั้น
-  const stream = WORKER + "/proxy/" + data.master.replace("https://", "");
+    const r = await fetch(`${API}/?vid=${vid}`);
+    const data = await r.json();
 
-  if (hls) hls.destroy();
+    console.log("RESOLVE:", data);
 
-  hls = new Hls({
-    maxBufferLength: 10,
-    enableWorker: true
-  });
+    if (!data.stream) {
+      throw new Error("NO STREAM FROM API");
+    }
 
-  hls.loadSource(stream);
-  hls.attachMedia(video);
+    hud.innerText = "Loading stream...";
+
+    if (hls) hls.destroy();
+
+    hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: true
+    });
+
+    hls.on(Hls.Events.ERROR, (e, d) => {
+      console.log("HLS ERROR:", d);
+      hud.innerText = "HLS ERROR: " + d.type;
+    });
+
+    hls.loadSource(data.stream);
+    hls.attachMedia(video);
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      hud.innerText = "PLAYING";
+      video.play();
+    });
+
+  } catch (e) {
+    console.error(e);
+    hud.innerText = "FAILED: " + e.message;
+  }
 }
 
 load();
