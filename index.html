@@ -23,56 +23,47 @@ video { width:100%; height:100vh; }
 <video id="video" controls autoplay muted></video>
 
 <script>
-const API = "https://ddl.royrover.workers.dev";
-const vid = new URLSearchParams(location.search).get("vid");
+const API_URL = "http://dootvz.myds.me:9988/db66/DDL_P.php";
+const WORKER_URL = "https://ddl.royrover.workers.dev";
 
-const video = document.getElementById("video");
-const hud = document.getElementById("hud");
+const VID = new URLSearchParams(location.search).get("vid");
 
 let hls;
+let current_stream_url = "";
 
-async function load() {
+async function loadStream() {
   try {
-    hud.innerText = "Resolving...";
 
-    const r = await fetch(`${API}/?vid=${vid}`);
-    const data = await r.json();
+    const res = await fetch(`${API_URL}?vid=${VID}`);
+    const data = await res.json();
 
-    console.log("RESOLVE:", data);
-
-    if (!data.stream) {
-      throw new Error("NO STREAM FROM API");
+    if (!data.stream_url) {
+      throw new Error("no_stream_url");
     }
 
-    hud.innerText = "Loading stream...";
+    const proxy_stream_url =
+      `${WORKER_URL}/proxy/` + data.stream_url.replace("https://", "");
+
+    if (current_stream_url === proxy_stream_url) return;
+
+    current_stream_url = proxy_stream_url;
 
     if (hls) hls.destroy();
 
     hls = new Hls({
-      enableWorker: true,
-      lowLatencyMode: true
+      maxBufferLength: 10,
+      enableWorker: true
     });
 
-    hls.on(Hls.Events.ERROR, (e, d) => {
-      console.log("HLS ERROR:", d);
-      hud.innerText = "HLS ERROR: " + d.type;
-    });
-
-    hls.loadSource(data.stream);
-    hls.attachMedia(video);
-
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      hud.innerText = "PLAYING";
-      video.play();
-    });
+    hls.loadSource(proxy_stream_url);
+    hls.attachMedia(document.getElementById("video"));
 
   } catch (e) {
-    console.error(e);
-    hud.innerText = "FAILED: " + e.message;
+    console.log("ERROR:", e.message);
   }
 }
 
-load();
+loadStream();
 </script>
 
 </body>
