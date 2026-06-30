@@ -1,141 +1,75 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>IPTV Player</title>
+<meta charset="utf-8">
+<title>IPTV Player</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      color: white;
-      font-family: Arial;
-    }
-
-    video {
-      width: 100%;
-      height: 100vh;
-      background: black;
-    }
-
-    .hud {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      background: rgba(0,0,0,0.6);
-      padding: 8px;
-      font-size: 12px;
-      border-radius: 6px;
-    }
-  </style>
+<style>
+body { margin:0; background:black; }
+video { width:100%; height:100vh; }
+#hud {
+  position:fixed; top:10px; left:10px;
+  color:white; font-size:12px;
+  background:rgba(0,0,0,0.5);
+  padding:6px;
+}
+</style>
 </head>
 
 <body>
 
-<div class="hud" id="hud">Loading...</div>
-<video id="video" controls autoplay muted></video>
+<div id="hud">loading...</div>
+<video id="v" controls autoplay muted></video>
 
 <script>
-const WORKER = "https://ddl.royrover.workers.dev";
+const API = "https://ddl.royrover.workers.dev";
 const VID = 54;
 
 let hls;
-let currentStream = "";
-let refreshTimer = null;
+let lastStream = "";
+let timer;
 
-const video = document.getElementById("video");
-const hud = document.getElementById("hud");
+async function load() {
+  const res = await fetch(`${API}/?vid=${VID}`);
+  const data = await res.json();
 
-// ================================
-// CHECK STREAM FIRST
-// ================================
-async function getStream() {
-  const res = await fetch(`${WORKER}/?vid=${VID}`);
+  document.getElementById("hud").innerText =
+    "TTL: " + data.ttl;
 
-  if (!res.ok) {
-    throw new Error("Resolver failed: " + res.status);
+  if (!data.stream) return;
+
+  // 🔥 ไม่ reload ถ้า stream เดิม
+  if (data.stream === lastStream) {
+    schedule(data.ttl);
+    return;
   }
 
-  return await res.json();
-}
+  lastStream = data.stream;
 
-// ================================
-// LOAD STREAM
-// ================================
-async function loadStream() {
-  try {
-    hud.innerText = "Fetching stream...";
+  if (hls) hls.destroy();
 
-    const data = await getStream();
+  if (Hls.isSupported()) {
+    hls = new Hls({
+      maxBufferLength: 5,
+      liveSyncDurationCount: 3,
+    });
 
-    if (!data.stream) {
-      hud.innerText = "No stream found";
-      return;
-    }
-
-    hud.innerText = "Checking stream...";
-
-    // ================================
-    // test stream ก่อนใช้จริง
-    // ================================
-    const test = await fetch(data.stream, { method: "HEAD" });
-
-    if (!test.ok) {
-      hud.innerText = "Stream expired or blocked: " + test.status;
-      return;
-    }
-
-    hud.innerText = "Playing... TTL " + data.ttl;
-
-    if (currentStream === data.stream) {
-      scheduleRefresh(data.ttl);
-      return;
-    }
-
-    currentStream = data.stream;
-
-    if (hls) {
-      hls.destroy();
-      hls = null;
-    }
-
-    if (Hls.isSupported()) {
-      hls = new Hls({
-        maxBufferLength: 5,
-        liveSyncDurationCount: 3,
-      });
-
-      hls.loadSource(data.stream);
-      hls.attachMedia(video);
-
-    } else {
-      video.src = data.stream;
-    }
-
-    scheduleRefresh(data.ttl);
-
-  } catch (err) {
-    hud.innerText = "Error: " + err.message;
-    console.error(err);
+    hls.loadSource(data.stream);
+    hls.attachMedia(document.getElementById("v"));
+  } else {
+    document.getElementById("v").src = data.stream;
   }
+
+  schedule(data.ttl);
 }
 
-// ================================
-// AUTO REFRESH (กัน token หมดอายุ)
-// ================================
-function scheduleRefresh(ttl) {
-  if (refreshTimer) clearTimeout(refreshTimer);
-
-  const refreshTime = Math.max(5, ttl - 10) * 1000;
-
-  refreshTimer = setTimeout(() => {
-    loadStream();
-  }, refreshTime);
+function schedule(ttl) {
+  clearTimeout(timer);
+  timer = setTimeout(load, (ttl - 5) * 1000);
 }
 
-loadStream();
+load();
 </script>
 
 </body>
