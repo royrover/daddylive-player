@@ -41,8 +41,7 @@ async function load() {
 
     if (!data.stream) throw new Error("no stream");
 
-    const stream = data.stream;
-
+    const stream = `${WORKER}/proxy/${encodeURIComponent(data.stream.replace("https://",""))}`;
     hud.innerText = "Playing...";
 
     if (stream === currentStream) {
