@@ -2,48 +2,51 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>IPTV Engine</title>
-<script src="https://cdn.jsdelivr.net/npm/hls.js"></script>
+<title>IPTV Player Stable</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
 <style>
-body { margin:0; background:black; }
+body { margin:0; background:black; color:white; font-family:Arial; }
 video { width:100%; height:100vh; }
 #hud {
-  position:fixed;
-  top:10px; left:10px;
-  background:#0008;
-  color:white;
-  padding:6px;
-  font-size:12px;
+  position:fixed; top:10px; left:10px;
+  background:rgba(0,0,0,0.6);
+  padding:6px; font-size:12px;
 }
 </style>
 </head>
 
 <body>
 
-<div id="hud">loading...</div>
-<video id="v" controls autoplay muted></video>
+<div id="hud">Loading...</div>
+<video id="video" controls autoplay muted></video>
 
 <script>
-const API = "https://ddl.royrover.workers.dev";
-const VID = 54;
+const API = "https://YOUR-PHP-DOMAIN/resolve.php";
+const WORKER = "https://ddl.royrover.workers.dev";
+const vid = new URLSearchParams(location.search).get("vid");
 
 let hls;
-let current = "";
+let currentStream = "";
+const video = document.getElementById("video");
+const hud = document.getElementById("hud");
 
 async function load() {
   try {
-    const res = await fetch(`${API}/?vid=${VID}`);
-    const data = await res.json();
+    hud.innerText = "Resolving...";
 
-    if (!data.stream) return;
+    const r = await fetch(`${API}?vid=${vid}`);
+    const data = await r.json();
 
-    document.getElementById("hud").innerText =
-      "TTL " + data.ttl;
+    if (!data.stream) throw new Error("no stream");
 
-    if (current === data.stream) return;
+    const stream = `${WORKER}/proxy/${data.stream.replace("https://","")}`;
 
-    current = data.stream;
+    hud.innerText = "Playing...";
+
+    if (stream === currentStream) return;
+
+    currentStream = stream;
 
     if (hls) hls.destroy();
 
@@ -52,25 +55,20 @@ async function load() {
       liveSyncDurationCount: 3
     });
 
-    hls.loadSource(data.stream);
-    hls.attachMedia(document.getElementById("v"));
-
-    hls.on(Hls.Events.ERROR, function(_, d) {
-      if (d.fatal) {
-        hls.destroy();
-        setTimeout(load, 2000);
-      }
+    hls.on(Hls.Events.ERROR, (e,d)=> {
+      console.log("HLS ERROR", d);
+      hud.innerText = "Stream error retrying...";
     });
 
+    hls.loadSource(stream);
+    hls.attachMedia(video);
+
+    setTimeout(load, (data.ttl - 5) * 1000);
+
   } catch (e) {
-    document.getElementById("hud").innerText =
-      "retry...";
-    setTimeout(load, 3000);
+    hud.innerText = "Error: " + e.message;
   }
 }
-
-// auto refresh before expire
-setInterval(load, 110000);
 
 load();
 </script>
