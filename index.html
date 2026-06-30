@@ -35,9 +35,20 @@ let timer;
 // ฟังก์ชันแปลงลิงก์สตรีมธรรมดาให้วิ่งผ่านตัวแปลงทราฟฟิกของ Cloudflare Workers
 function convertToProxyUrl(rawUrl) {
   if (!rawUrl) return "";
-  // แยกส่วนหัว https:// ออกแล้วสอดแทรกคำว่า /proxy/ ต่อท้ายโดเมนหลักของคุณแทน
-  const cleanUrl = rawUrl.replace(/^https?:\/\//, "");
-  return `${API}/proxy/${cleanUrl}`;
+  
+  // ทำความสะอาดลิงก์ ดึงเอาเฉพาะ URL ของสตรีมจริงๆ ออกมา (ตัดพวกเศษสัญญาน Error ที่ติดมาออก)
+  let cleanUrl = rawUrl;
+  if (cleanUrl.includes("#")) {
+    cleanUrl = cleanUrl.split("#")[1]; // ดึงเฉพาะตัวลิงก์สตรีมหลังเครื่องหมาย # ถ้ามี
+  }
+  if (cleanUrl.includes("&error=")) {
+    cleanUrl = cleanUrl.split("&error=")[0];
+  }
+  
+  cleanUrl = cleanUrl.trim();
+  
+  // 🚀 ไม้ตาย: ส่งแบบ URL Encode ทั้งก้อนเพื่อให้ Worker ไปแกะอ่านปลายทางได้แม่นยำ ไม่หลุดเลเยอร์
+  return `${API}/proxy/?url=${encodeURIComponent(cleanUrl)}`;
 }
 
 async function load() {
