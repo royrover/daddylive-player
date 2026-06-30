@@ -2,16 +2,19 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>NUtv Player</title>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<title>IPTV Engine</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js"></script>
 
 <style>
 body { margin:0; background:black; }
 video { width:100%; height:100vh; }
 #hud {
-  position:fixed; top:10px; left:10px;
-  color:white; background:#0008;
-  padding:8px; font-size:12px;
+  position:fixed;
+  top:10px; left:10px;
+  background:#0008;
+  color:white;
+  padding:6px;
+  font-size:12px;
 }
 </style>
 </head>
@@ -19,10 +22,10 @@ video { width:100%; height:100vh; }
 <body>
 
 <div id="hud">loading...</div>
-<video id="video" controls autoplay muted></video>
+<video id="v" controls autoplay muted></video>
 
 <script>
-const WORKER = "https://ddl.royrover.workers.dev";
+const API = "https://ddl.royrover.workers.dev";
 const VID = 54;
 
 let hls;
@@ -30,7 +33,7 @@ let current = "";
 
 async function load() {
   try {
-    const res = await fetch(`${WORKER}/?vid=${VID}`);
+    const res = await fetch(`${API}/?vid=${VID}`);
     const data = await res.json();
 
     if (!data.stream) return;
@@ -50,7 +53,7 @@ async function load() {
     });
 
     hls.loadSource(data.stream);
-    hls.attachMedia(document.getElementById("video"));
+    hls.attachMedia(document.getElementById("v"));
 
     hls.on(Hls.Events.ERROR, function(_, d) {
       if (d.fatal) {
@@ -61,13 +64,14 @@ async function load() {
 
   } catch (e) {
     document.getElementById("hud").innerText =
-      "retrying...";
-    setTimeout(load, 2000);
+      "retry...";
+    setTimeout(load, 3000);
   }
 }
 
-// auto refresh
+// auto refresh before expire
 setInterval(load, 110000);
+
 load();
 </script>
 
