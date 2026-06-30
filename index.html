@@ -19,8 +19,7 @@ video { width:100%; height:100vh; }
 <div id="hud">Loading...</div>
 <video id="video" controls autoplay muted></video>
 <script>
-const API_URL = "https://ddl.royrover.workers.dev/ddl/DDL_P.php";
-const PROXY_URL = "https://ddl.royrover.workers.dev/ddl/DDL_Proxy.php";
+const API_URL = "https://dootvz.myds.me/db66/DDL_P.php?vid=54";
 const VID = new URLSearchParams(location.search).get("vid");
 let hls;
 let current_stream_url = "";
@@ -31,8 +30,7 @@ async function loadStream() {
     if (!data.stream_url) {
       throw new Error("no_stream_url");
     }
-    const proxy_stream_url =
-      `${PROXY_URL}?url=` + btoa(data.stream_url);
+    const proxy_stream_url = data.stream_url;
     if (current_stream_url === proxy_stream_url) return;
     current_stream_url = proxy_stream_url;
     if (hls) hls.destroy();
