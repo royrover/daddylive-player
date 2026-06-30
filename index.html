@@ -4,7 +4,6 @@
 <meta charset="utf-8"/>
 <title>IPTV Stable Final</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-
 <style>
 body { margin:0; background:black; }
 video { width:100%; height:100vh; }
@@ -16,55 +15,38 @@ video { width:100%; height:100vh; }
 }
 </style>
 </head>
-
 <body>
-
 <div id="hud">Loading...</div>
 <video id="video" controls autoplay muted></video>
-
 <script>
 const API_URL = "http://dootvz.myds.me:9988/db66/DDL_P.php";
-const WORKER_URL = "https://ddl.royrover.workers.dev";
-
+const PROXY_URL = "http://dootvz.myds.me:9988/db66/DDL_Proxy.php";
 const VID = new URLSearchParams(location.search).get("vid");
-
 let hls;
 let current_stream_url = "";
-
 async function loadStream() {
   try {
-
     const res = await fetch(`${API_URL}?vid=${VID}`);
     const data = await res.json();
-
     if (!data.stream_url) {
       throw new Error("no_stream_url");
     }
-
     const proxy_stream_url =
-      `${WORKER_URL}/proxy/` + data.stream_url.replace("https://", "");
-
+      `${PROXY_URL}?url=` + btoa(data.stream_url);
     if (current_stream_url === proxy_stream_url) return;
-
     current_stream_url = proxy_stream_url;
-
     if (hls) hls.destroy();
-
     hls = new Hls({
       maxBufferLength: 10,
       enableWorker: true
     });
-
     hls.loadSource(proxy_stream_url);
     hls.attachMedia(document.getElementById("video"));
-
   } catch (e) {
     console.log("ERROR:", e.message);
   }
 }
-
 loadStream();
 </script>
-
 </body>
 </html>
